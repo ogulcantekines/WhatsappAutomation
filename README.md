@@ -7,9 +7,9 @@ A professional-grade terminal-based automation tool for WhatsApp. Designed for s
 
 ## Key Features
 - **Interactive CLI**: Dynamic input for phone numbers and messages.
-- **Smart Delays**: Built-in timers to simulate human interaction and reduce ban risk.
-- **Clean Exit**: Automated browser tab management for memory efficiency.
-- **Cross-Platform**: Fully compatible with **Windows**, **Fedora**, **Ubuntu**, and **Arch Linux**.
+- **Configurable Wait Time**: `-w/--wait-time` controls how long the tool waits before sending.
+- **Clean Exit**: Automated browser tab management after sending.
+- **Cross-Platform**: Designed to work across **Windows**, **Fedora**, **Ubuntu**, and **Arch Linux** (browser required).
 
 ## Installation
 
@@ -35,10 +35,20 @@ pip install -r requirements.txt
 
 ## Usage
 
-Simply run the script and follow the on-screen instructions:
+Interactive mode (prompts for number and message):
 ```bash
 python main.py
 ```
+
+CLI flags (number with country code, e.g. `+905551234567`):
+```bash
+python main.py -n "+905551234567" -m "Hello" -w 30
+```
+
+Available flags:
+- `-n` / `--number`: Target phone
+- `-m` / `--message`: Message text
+- `-w` / `--wait-time`: Seconds to wait before sending (default: 25)
 
 ## Troubleshooting (Linux/Fedora/Arch)
 If you encounter display or permission errors, try the following:
@@ -60,7 +70,7 @@ If the script complains about `tkinter` or `MouseInfo`, install the following
 - [ ] Multi-contact support (Comma-separated numbers)
 - [ ] Scheduled messaging for future dates
 - [ ] Advanced logging and error handling
-- [ ] Professional CLI with Banners and Colors (rich/argparse support)
+- [x] Professional CLI with Banners and Colors (Rich + argparse support)
 
 ## License
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the MIT License. See `LICENSE.md` for more information.
