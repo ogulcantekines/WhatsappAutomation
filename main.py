@@ -52,12 +52,43 @@ def normalize_phone(raw: str) -> Optional[str]:
     return f"+{digits}"
 
 
+def normalize_group_id(raw: str) -> Optional[str]:
+    """
+    Accepts either a raw group id or a WhatsApp invite link and returns a clean group id.
+    Example link: https://chat.whatsapp.com/AB123CDEFGHijklmn
+    """
+    s = raw.strip()
+    if not s:
+        return None
+
+    # If user pasted the invite URL, extract the group id part.
+    if "chat.whatsapp.com" in s:
+        # Keep only the part after the last '/'.
+        s = s.split("/")[-1]
+    # Remove query parameters if present (e.g. "?foo=bar").
+    s = s.split("?")[0].split("&")[0]
+
+    # WhatsApp group invite codes are mostly alphanumeric.
+    # Some codes may include '-' or '_' so we keep them.
+    s = re.sub(r"[^A-Za-z0-9_-]", "", s)
+
+    # Basic sanity check: group ids are short, but not empty.
+    if len(s) < 8:
+        return None
+    return s
+
+
 def main():
     show_banner()
 
     parser = argparse.ArgumentParser(description="Professional WhatsApp CLI Bot")
     parser.add_argument("-n", "--number", help="Target phone (country code, e.g. +905551234567)")
     parser.add_argument("-m", "--message", help="Message to send")
+    parser.add_argument(
+        "-g",
+        "--group",
+        help="WhatsApp group id (or invite link like https://chat.whatsapp.com/...)",
+    )
     parser.add_argument(
         "-w",
         "--wait-time",
@@ -69,45 +100,98 @@ def main():
     args = parser.parse_args()
 
     # If any required argument is missing, show usage hint and fall back to interactive mode.
-    if not args.number or not args.message:
+    if not (args.number or args.group) or not args.message:
         console.print(
-            "[dim italic]Hint: python main.py -n <number> -m <message> [-w seconds][/dim italic]"
+            "[dim italic]Hint(personal): python main.py -n <number> -m <message> [-w seconds][/dim italic] \n"
+            "[dim italic]Hint(group): python main.py -g <group_id_or_link> -m <message> [-w seconds][/dim italic]"
         )
         console.print("")
 
-    number_raw = args.number or console.input(
-        "[bold yellow]?[/bold yellow] Target number (+country...): "
-    )
-    message = args.message or console.input("[bold yellow]?[/bold yellow] Your message: ")
+    number_raw = args.number
+    group_raw = args.group
+    number = None
+    group_id = None
 
-    number = normalize_phone(number_raw)
-    if not number:
-        if number_raw.strip():
-            log(
-                "Invalid phone: use 10–15 digits with country code (e.g. +905551234567).",
-                level="error",
-            )
+    if not group_raw and not number_raw:
+        mode = console.input(
+            "[bold yellow]?[/bold yellow] Mode ([cyan]1[/cyan] Personal, [cyan]2[/cyan] Group): "
+        ).strip()
+
+        if mode == "1":
+            number_raw = console.input(
+                "[bold yellow]?[/bold yellow] Target number:(with country code, e.g. +905551234567): "
+            ).strip()
+            number = normalize_phone(number_raw)
+            if not number:
+                log(
+                    "Invalid phone: use 10–15 digits with country code (e.g. +905551234567).",
+                    level="error",
+                )
+                return
+        elif mode == "2":
+            group_raw = console.input("[bold yellow]?[/bold yellow] Group ID (or invite link): ").strip()
+            group_id = normalize_group_id(group_raw) if group_raw else None
+            if not group_id:
+                log("Invalid group id/link. Please enter a valid group id or invite link.", level="error")
+                return
         else:
-            log("Operation cancelled due to missing information.", level="error")
-        return
+            log("Invalid mode selected. Please choose 1 (Personal) or 2 (Group).", level="error")
+            return
+    else:
+        if group_raw:
+            group_id = normalize_group_id(group_raw)
+            if not group_id:
+                log("Invalid group id/link provided in -g.", level="error")
+                return
+
+        if not group_id:
+            number = normalize_phone(number_raw) if number_raw else None
+            if not number:
+                if number_raw and number_raw.strip():
+                    log(
+                        "Invalid phone: use 10–15 digits with country code (e.g. +905551234567).",
+                        level="error",
+                    )
+                else:
+                    log("Operation cancelled due to missing information.", level="error")
+                return
+
+    message = args.message or console.input("[bold yellow]?[/bold yellow] Your message: ")
 
     message = message.strip()
     if not message:
         log("Operation cancelled: message is empty.", level="error")
         return
 
-    log(f"Operation started: [cyan]{number}[/cyan]")
+    target = group_id if group_id else number
+    log(f"Operation started: [cyan]{target}[/cyan]")
+
     log("Browser is being triggered, please wait...")
 
     # Enforce a minimum wait time to give WhatsApp Web enough time to load.
-    if args.wait_time < 5:
-        log("Wait time too low, setting to minimum 5 seconds.", level="info")
-        args.wait_time = 5
+    # Group chats often take longer to load before the message box is ready.
+    min_wait = 25 if group_id else 5
+    wait_time = max(args.wait_time, min_wait)
+    if wait_time > args.wait_time:
+        log(f"Wait time too low, setting to minimum {min_wait} seconds.", level="info")
 
     try:
-        pywhatkit.sendwhatmsg_instantly(
-            number, message, wait_time=args.wait_time, tab_close=True
-        )
+        if group_id:
+            pywhatkit.sendwhatmsg_to_group_instantly(
+                group_id,
+                message,
+                wait_time=wait_time,
+                tab_close=True,
+                close_time=10,
+            )
+        else:
+            pywhatkit.sendwhatmsg_instantly(
+                number,
+                message,
+                wait_time=wait_time,
+                tab_close=True
+            )
+
         log("Message sent successfully!", level="success")
     except Exception as e:
         log(f"An error occurred: {e}", level="error")
